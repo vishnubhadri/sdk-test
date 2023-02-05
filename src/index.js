@@ -12,14 +12,18 @@ const upload = multer({
 
 app.post('/upload', upload.single('image'), (req, res) => {
   if (!req.file) {
-    return res.status(400).json({ error: 'Please provide an image' });
+    return res.status(400).json({ message: 'Please provide an image',"pass": false });
   }
 
-  res.status(200).json({ message: 'Image received' });
+  res.status(200).json({
+    "message": "Your document quality is good",
+    "quality": "99",
+    "pass": true
+  });
 });
 
 app.use((error, req, res, next) => {
-  res.status(400).json({ error: error.message });
+  res.status(400).json({ message: error.message,"pass": false });
 });
 
 app.listen(3000, () => {
