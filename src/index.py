@@ -14,7 +14,7 @@ from faint import check_faint_percentage
 from noisy import check_noisy_percentage
 from smallText import check_text_size_percentage
 
-@app.route('/metrics', methods=['POST'])
+@app.route('/upload', methods=['POST'])
 def get_image_quality_scores():
     file_input = request.files.get('image')
     if not file_input:
@@ -78,7 +78,7 @@ def get_image_quality_scores():
             "pass": False
         }), 400
 
-@app.route('/upload', methods=['POST'])
+@app.route('/analysis', methods=['POST'])
 def image_quality_score():
     file_input = request.files.get('image')
     if file_input is None:
