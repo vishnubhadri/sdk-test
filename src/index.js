@@ -1,12 +1,16 @@
 const express = require('express');
 const app = express();
 const multer = require('multer');
+
+const imageAnalysis = require('./imageAnalysis.js');
+
 const upload = multer({
-  fileFilter: (req, file, cb) => {
+  fileFilter: async (req, file, cb) => {
     if (!file.mimetype.match(/jpe|jpeg|png|gif$i/)) {
       return cb(new Error('File type is not supported'), false);
     }
-    cb(null, true);
+    let resp=await imageAnalysis(file);
+    cb(resp, true);
   }
 });
 
