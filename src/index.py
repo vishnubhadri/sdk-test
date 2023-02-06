@@ -7,12 +7,12 @@ import numpy as np
 
 app = Flask(__name__)
 
-def is_valid_image_format(img):
-    try:
-        _ = cv2.imdecode(np.frombuffer(img, np.uint8), cv2.IMREAD_UNCHANGED)
-        return True
-    except:
-        return False
+from utils import is_valid_image_format,evaluate_quality
+from blurry import check_blurry_percentage
+from darky import check_darky_percentage
+from faint import check_faint_percentage
+from noisy import check_noisy_percentage
+from smallText import check_text_size_percentage
 
 @app.route('/metrics', methods=['POST'])
 def get_image_quality_scores():
@@ -29,42 +29,49 @@ def get_image_quality_scores():
             "message": "The image format is not supported",
             "pass": False
         }), 400
+
     try:
-        img = cv2.imdecode(np.frombuffer(img, np.uint8), cv2.IMREAD_UNCHANGED)
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        # blurriness
-        vol = cv2.Laplacian(gray, cv2.CV_64F).var()
-        # noise
-        mse = np.mean((img - cv2.GaussianBlur(img, (5,5), 0)) ** 2)
+        blurry_result = check_blurry_percentage(img=img)
+        if 200 not in blurry_result:
+            return jsonify(blurry_result), 400
 
-        # brightness
-        mpv = np.mean(gray)
+        darky_result = check_darky_percentage(img=img)
+        if 200 not in darky_result:
+            return jsonify(darky_result), 400
 
-        # text_too_small
-        ret, thresh = cv2.threshold(gray, 10, 255, cv2.THRESH_BINARY)
-        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        avg_size = 0
-        for cnt in contours:
-            avg_size += cv2.contourArea(cnt)
-        avg_size /= len(contours) if len(contours) != 0 else 1
-        text_too_small = 0 if avg_size > 50 else 1
-        
-        max_score = vol + mse + (1-mpv) + text_too_small
-        quality_score = 100 * (1 - (vol + mse + (1-mpv) + text_too_small) / max_score)
+        faint_result = check_faint_percentage(img=img)
+        if 200 not in faint_result:
+            return jsonify(faint_result), 400
+
+        noisy_result = check_noisy_percentage(img=img)
+        if 200 not in noisy_result:
+            return jsonify(noisy_result), 400
+
+        text_size_result = check_text_size_percentage(img=img)
+        if 200 not in text_size_result:
+            return jsonify(text_size_result), 400
+
+        darky_result = darky_result[0]
+        blurry_result = blurry_result[0]
+        faint_result = faint_result[0]
+        noisy_result = noisy_result[0]
+        text_size_result = text_size_result[0]
+        quality_score = min(100 - (blurry_result['blurry_percentage'] + darky_result['darky_percentage'] + faint_result['faint_percentage'] + noisy_result['noisy_percentage'] + text_size_result['text_size_percentage']) / 5,100)
 
         return jsonify({
-            "message": "Your document quality is good",
+            "message": "Your document quality is "+evaluate_quality(quality_score),
             "quality": {
-                "quality_score": quality_score,
-                "defect_blurry": 100 * (1 - vol / max_score),
-                "defect_dark": 100 * (1 - (1-mpv) / max_score),
-                "defect_faint": 100 * (1 - mse / max_score),
-                "defect_noisy": 100 * (1 - mse / max_score),
-                "defect_text_too_small": 100 * (1 - text_too_small / max_score)
+                "quality_score":quality_score,
+                "defect_blurry": blurry_result['blurry_percentage'],
+                "defect_dark": darky_result['darky_percentage'],
+                "defect_faint":faint_result['faint_percentage'],
+                "defect_noisy": noisy_result['noisy_percentage'],
+                "defect_text_too_small": text_size_result['text_size_percentage']
             },
             "pass": True
         })
     except Exception as e:
+        print(e)
         return jsonify({
             "message": "An error occurred while processing the image",
             "error": str(e),
@@ -94,37 +101,30 @@ def image_quality_score():
     except Exception as e:
         return jsonify({"message": str(e), "pass": False}), 400
 
-
 @app.route('/blurry', methods=['POST'])
 def blurry_percentage():
-    file_input = request.files.get('image')
-    if not file_input:
-        return jsonify({
-            "message": "Please provide an image",
-            "pass": False
-        }), 400
-
-    image = cv2.imdecode(np.frombuffer(file_input.read(), np.uint8), cv2.IMREAD_GRAYSCALE)
-
-    laplacian = cv2.Laplacian(image, cv2.CV_64F)
-    score = np.var(laplacian)
-    blurry_percentage = min(1, max(0, 1 - (score / 100)))
-    return jsonify({"blurry_percentage":blurry_percentage})
+    result, status_code = check_blurry_percentage(file_input=request.files.get('image'))
+    return jsonify(result), status_code
 
 @app.route('/darky', methods=['POST'])
 def darky_percentage():
-    file_input = request.files.get('image')
-    if not file_input:
-        return jsonify({
-            "message": "Please provide an image",
-            "pass": False
-        }), 400
-    img = cv2.imdecode(np.frombuffer(file_input.read(), np.uint8), cv2.IMREAD_GRAYSCALE)
-    ret, thresh = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
-    dark_pixels = np.count_nonzero(thresh == 0)
-    total_pixels = img.shape[0] * img.shape[1]
-    dark_percentage = (dark_pixels / total_pixels) * 100
-    return jsonify({"darkey_percentage": dark_percentage})
+    result, status_code = check_blurry_percentage(file_input=request.files.get('image'))
+    return jsonify(result), status_code
+
+@app.route('/faint', methods=['POST'])
+def faint_percentage():
+    result, status_code = check_faint_percentage(file_input=request.files.get('image'))
+    return jsonify(result), status_code
+
+@app.route('/noisy', methods=['POST'])
+def noisy_percentage():
+    result, status_code = check_noisy_percentage(file_input=request.files.get('image'))
+    return jsonify(result), status_code
+
+@app.route('/too_small', methods=['POST'])
+def get_text_too_small_percentage():
+    result, status_code = check_text_size_percentage(file_input=request.files.get('image'))
+    return jsonify(result), status_code
 
 if __name__ == '__main__':
     app.run()
